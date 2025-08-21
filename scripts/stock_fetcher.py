@@ -1,11 +1,13 @@
+from datetime import datetime, timedelta
 import os
 import sys
 import requests
 import json
 import psycopg2
-from datetime import datetime, timedelta
+import time
 import logging
 from typing import Dict, List, Optional
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(
@@ -14,26 +16,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class StockDataFetcher:
+class YahooStockDataFetcher:
     """
-    A class to fetch stock data from Alpha Vantage API and store it in PostgreSQL
+    A class to fetch stock data from Yahoo Finance API and store it in PostgreSQL
     """
     
     def __init__(self):
-        self.api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
         self.db_config = {
-            'host': os.getenv('POSTGRES_HOST', 'localhost'),
+            'host': os.getenv('POSTGRES_HOST', 'postgres'),
             'database': os.getenv('POSTGRES_DB', 'stockdata'),
             'user': os.getenv('POSTGRES_USER', 'airflow'),
             'password': os.getenv('POSTGRES_PASSWORD', 'airflow123'),
             'port': os.getenv('POSTGRES_PORT', '5432')
         }
         
-        # Validate required environment variables
-        if not self.api_key:
-            raise ValueError("ALPHA_VANTAGE_API_KEY environment variable is required")
+        # Yahoo Finance 
+        self.base_url = "https://query1.finance.yahoo.com/v8/finance/chart"
         
-        self.base_url = "https://www.alphavantage.co/query"
+        # Headers to mimic browser request
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         
     def get_database_connection(self):
         """
@@ -52,100 +55,129 @@ class StockDataFetcher:
                 logger.error(f"Database connection attempt {retry_count} failed: {e}")
                 if retry_count >= max_retries:
                     raise
-                time.sleep(5)  # Wait before retrying
+                time.sleep(2)  
     
-    def fetch_stock_data(self, symbol: str = "AAPL") -> Optional[Dict]:
+    def fetch_stock_data(self, symbol: str = "AAPL", period: str = "3mo") -> Optional[Dict]:
         """
-        Fetch daily stock data from Alpha Vantage API
+        Fetch stock data from Yahoo Finance API
+        
+        Args:
+            symbol: Stock symbol (e.g., 'AAPL')
+            period: Time period ('1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max')
         """
         try:
+            # Yahoo Finance API endpoint
+            url = f"{self.base_url}/{symbol}"
+            
             params = {
-                'function': 'TIME_SERIES_DAILY',
-                'symbol': symbol,
-                'apikey': self.api_key,
-                'outputsize': 'compact'  # Get last 100 data points
+                'range': period,
+                'interval': '1d',  # Daily data
+                'includePrePost': 'true',
+                'events': 'div%2Csplit'
             }
             
-            logger.info(f"Fetching stock data for {symbol}")
-            response = requests.get(self.base_url, params=params, timeout=30)
+            logger.info(f"Fetching stock data for {symbol} (period: {period})")
+            response = requests.get(url, params=params, headers=self.headers, timeout=30)
             response.raise_for_status()
             
             data = response.json()
             
             # Check for API errors
-            if 'Error Message' in data:
-                logger.error(f"API Error: {data['Error Message']}")
+            if 'chart' not in data or not data['chart']['result']:
+                logger.error(f"No data returned for {symbol}")
                 return None
             
-            if 'Note' in data:
-                logger.warning(f"API Note: {data['Note']}")
-                return None
+            chart_data = data['chart']['result'][0]
             
-            if 'Time Series (Daily)' not in data:
-                logger.error(f"Unexpected API response format: {list(data.keys())}")
+            if 'timestamp' not in chart_data or not chart_data['timestamp']:
+                logger.error(f"No timestamp data for {symbol}")
                 return None
             
             logger.info(f"Successfully fetched data for {symbol}")
-            return data
+            return chart_data
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Request failed: {e}")
+            logger.error(f"Request failed for {symbol}: {e}")
             return None
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"Failed to parse JSON response for {symbol}: {e}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error fetching data: {e}")
+            logger.error(f"Unexpected error fetching data for {symbol}: {e}")
             return None
     
     def parse_stock_data(self, data: Dict, symbol: str) -> List[Dict]:
         """
-        Parse the API response and extract relevant data points
+        Parse the Yahoo Finance API response and extract relevant data points
         """
         try:
-            time_series = data.get('Time Series (Daily)', {})
+            timestamps = data.get('timestamp', [])
+            indicators = data.get('indicators', {})
+            quote = indicators.get('quote', [{}])[0]
+            
+            # Extract price arrays
+            opens = quote.get('open', [])
+            highs = quote.get('high', [])
+            lows = quote.get('low', [])
+            closes = quote.get('close', [])
+            volumes = quote.get('volume', [])
+            
             parsed_data = []
             
-            for date_str, daily_data in time_series.items():
+            for i, timestamp in enumerate(timestamps):
                 try:
-                    # Parse the date
-                    date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    # Convert timestamp to date
+                    date_obj = datetime.fromtimestamp(timestamp).date()
+                    
+                    # Skip if any of the essential price data is missing
+                    if (i >= len(opens) or i >= len(highs) or 
+                        i >= len(lows) or i >= len(closes)):
+                        continue
                     
                     # Extract price data with proper error handling
                     record = {
                         'symbol': symbol,
                         'date_recorded': date_obj,
-                        'open_price': self._safe_float_conversion(daily_data.get('1. open')),
-                        'high_price': self._safe_float_conversion(daily_data.get('2. high')),
-                        'low_price': self._safe_float_conversion(daily_data.get('3. low')),
-                        'close_price': self._safe_float_conversion(daily_data.get('4. close')),
-                        'volume': self._safe_int_conversion(daily_data.get('5. volume'))
+                        'open_price': self._safe_float_conversion(opens[i]),
+                        'high_price': self._safe_float_conversion(highs[i]),
+                        'low_price': self._safe_float_conversion(lows[i]),
+                        'close_price': self._safe_float_conversion(closes[i]),
+                        'volume': self._safe_int_conversion(volumes[i] if i < len(volumes) else None)
                     }
                     
-                    parsed_data.append(record)
+                    # Only add record if we have essential price data
+                    if (record['open_price'] is not None and 
+                        record['high_price'] is not None and
+                        record['low_price'] is not None and 
+                        record['close_price'] is not None):
+                        parsed_data.append(record)
                     
-                except ValueError as e:
-                    logger.warning(f"Skipping invalid date entry {date_str}: {e}")
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Skipping invalid data point {i} for {symbol}: {e}")
                     continue
             
             logger.info(f"Parsed {len(parsed_data)} records for {symbol}")
             return parsed_data
             
         except Exception as e:
-            logger.error(f"Error parsing stock data: {e}")
+            logger.error(f"Error parsing stock data for {symbol}: {e}")
             return []
     
-    def _safe_float_conversion(self, value: str) -> Optional[float]:
-        """Safely convert string to float"""
+    def _safe_float_conversion(self, value) -> Optional[float]:
+        """Safely convert value to float"""
         try:
-            return float(value) if value else None
+            if value is None:
+                return None
+            return float(value)
         except (ValueError, TypeError):
             return None
     
-    def _safe_int_conversion(self, value: str) -> Optional[int]:
-        """Safely convert string to int"""
+    def _safe_int_conversion(self, value) -> Optional[int]:
+        """Safely convert value to int"""
         try:
-            return int(float(value)) if value else None
+            if value is None:
+                return None
+            return int(float(value))
         except (ValueError, TypeError):
             return None
     
@@ -201,20 +233,48 @@ class StockDataFetcher:
             if conn:
                 conn.close()
     
-    def run_pipeline(self, symbols: List[str] = None) -> bool:
+    def get_stock_info(self, symbol: str) -> Optional[Dict]:
+        """
+        Get basic stock information (optional method for additional data)
+        """
+        try:
+            url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}"
+            params = {
+                'modules': 'price,summaryDetail,assetProfile'
+            }
+            
+            response = requests.get(url, params=params, headers=self.headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if 'quoteSummary' in data and data['quoteSummary']['result']:
+                return data['quoteSummary']['result'][0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error fetching stock info for {symbol}: {e}")
+            return None
+    
+    def run_pipeline(self, symbols: List[str] = None, period: str = "3mo") -> bool:
         """
         Run the complete data pipeline for specified symbols
+        
+        Args:
+            symbols: List of stock symbols
+            period: Time period for data ('1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max')
         """
         if symbols is None:
-            symbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA']  # Default symbols
+            symbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA']  
         
-        logger.info(f"Starting pipeline for symbols: {symbols}")
+        logger.info(f"Starting pipeline for symbols: {symbols} (period: {period})")
         overall_success = True
         
         for symbol in symbols:
             try:
-                # Fetch data from API
-                api_data = self.fetch_stock_data(symbol)
+                # Fetch data from Yahoo Finance
+                api_data = self.fetch_stock_data(symbol, period)
                 
                 if api_data is None:
                     logger.error(f"Failed to fetch data for {symbol}")
@@ -235,6 +295,9 @@ class StockDataFetcher:
                 if not update_success:
                     logger.error(f"Failed to update database for {symbol}")
                     overall_success = False
+                    
+                # Small delay to be respectful to Yahoo Finance
+                time.sleep(5)
                 
             except Exception as e:
                 logger.error(f"Pipeline failed for {symbol}: {e}")
@@ -252,12 +315,30 @@ def main():
     Main function to run the stock data fetcher
     """
     try:
-        # Get symbols from command line arguments or use defaults
-        symbols = sys.argv[1:] if len(sys.argv) > 1 else ['AAPL', 'GOOGL', 'MSFT', 'TSLA']
+        # Parse command line arguments
+        symbols = []
+        period = "3mo"  # Default period
+        
+        # Simple argument parsing
+        args = sys.argv[1:]
+        i = 0
+        while i < len(args):
+            if args[i] == '--period' and i + 1 < len(args):
+                period = args[i + 1]
+                i += 2
+            else:
+                symbols.append(args[i])
+                i += 1
+        
+        # Use defaults if no symbols provided
+        if not symbols:
+            symbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA']
+        
+        logger.info(f"Running for symbols: {symbols}, period: {period}")
         
         # Initialize and run the fetcher
-        fetcher = StockDataFetcher()
-        success = fetcher.run_pipeline(symbols)
+        fetcher = YahooStockDataFetcher()
+        success = fetcher.run_pipeline(symbols, period)
         
         # Exit with appropriate code
         sys.exit(0 if success else 1)

@@ -1,12 +1,18 @@
+-- Create airflow DB if not exists
+CREATE DATABASE airflow;
+
+-- Switch to stockdata and create schema
+\c stockdata;
+
 -- Create the stock_data table
 CREATE TABLE IF NOT EXISTS stock_data (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(10) NOT NULL,
     date_recorded DATE NOT NULL,
-    open_price DECIMAL(10, 2),
-    high_price DECIMAL(10, 2),
-    low_price DECIMAL(10, 2),
-    close_price DECIMAL(10, 2),
+    open_price DOUBLE PRECISION,
+    high_price DOUBLE PRECISION,
+    low_price DOUBLE PRECISION,
+    close_price DOUBLE PRECISION,
     volume BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -14,4 +20,5 @@ CREATE TABLE IF NOT EXISTS stock_data (
 );
 
 -- Create an index for better query performance
-CREATE INDEX IF NOT EXISTS idx_stock_symbol_date ON stock_data(symbol, date_recorded);
+CREATE INDEX IF NOT EXISTS idx_stock_symbol_date 
+    ON stock_data(symbol, date_recorded);

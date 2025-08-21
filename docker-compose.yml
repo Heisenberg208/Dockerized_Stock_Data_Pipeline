@@ -1,13 +1,8 @@
-version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:13
-    environment:
-      POSTGRES_DB: stockdata
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow123
+    env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -17,8 +12,9 @@ services:
       test: ["CMD-SHELL", "pg_isready -U airflow"]
       interval: 5s
       retries: 5
+    networks:
+      - airflow
 
-  # Redis for Airflow
   redis:
     image: redis:7.2-alpine
     ports:
@@ -28,26 +24,15 @@ services:
       interval: 5s
       timeout: 30s
       retries: 50
+    networks:
+      - airflow
 
-  # Airflow Webserver
   airflow-webserver:
     build: .
     command: webserver
+    env_file: .env
     ports:
       - "8080:8080"
-    environment:
-      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres/stockdata
-      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow123@postgres/stockdata
-      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
-      - AIRFLOW__CORE__FERNET_KEY=ZmDfcTF7_60GrrY167zsiPd67pEvs0aGqv3oEWpS8Bg=
-      - AIRFLOW__WEBSERVER__SECRET_KEY=mysecretkey
-      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
-      - ALPHA_VANTAGE_API_KEY=YOUR_API_KEY_HERE
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=stockdata
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow123
     volumes:
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
@@ -57,28 +42,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    restart: always
+    networks:
+      - airflow
 
-  # Airflow Scheduler
   airflow-scheduler:
     build: .
     command: scheduler
-    environment:
-      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres/stockdata
-      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow123@postgres/stockdata
-      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
-      - AIRFLOW__CORE__FERNET_KEY=ZmDfcTF7_60GrrY167zsiPd67pEvs0aGqv3oEWpS8Bg=
-      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
-      - ALPHA_VANTAGE_API_KEY=YOUR_API_KEY_HERE
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=stockdata
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow123
+    env_file: .env
     volumes:
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
@@ -88,22 +59,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: always
+    networks:
+      - airflow
 
-  # Airflow Worker
   airflow-worker:
     build: .
     command: celery worker
-    environment:
-      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres/stockdata
-      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow123@postgres/stockdata
-      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
-      - AIRFLOW__CORE__FERNET_KEY=ZmDfcTF7_60GrrY167zsiPd67pEvs0aGqv3oEWpS8Bg=
-      - ALPHA_VANTAGE_API_KEY=YOUR_API_KEY_HERE
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=stockdata
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow123
+    env_file: .env
     volumes:
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
@@ -113,27 +76,42 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: always
+    networks:
+      - airflow
 
-  # Airflow Initializer (runs once to set up the database)
   airflow-init:
     build: .
     command: >
       bash -c "
-        airflow db init &&
-        airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
+      airflow db init &&
+      airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true
       "
-    environment:
-      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres/stockdata
-      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow123@postgres/stockdata
-      - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
-      - AIRFLOW__CORE__FERNET_KEY=ZmDfcTF7_60GrrY167zsiPd67pEvs0aGqv3oEWpS8Bg=
+    env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - airflow
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - airflow
+
 
 volumes:
   postgres_data:
   airflow_logs:
+
+networks:
+  airflow:
+    driver: bridge
