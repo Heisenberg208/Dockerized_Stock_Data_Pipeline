@@ -184,13 +184,13 @@ def check_database_connection(**context):
         return True
         
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        print(f" Database connection failed: {e}")
         raise
 
 
 def fetch_and_store_stock_data(**context):
     """Main task to fetch and store stock data from Yahoo Finance"""
-    print("📈 Starting stock data fetch and store process...")
+    print(" Starting stock data fetch and store process...")
     
     try:
         # Get period from DAG run config or use default
@@ -200,8 +200,8 @@ def fetch_and_store_stock_data(**context):
         if dag_run and dag_run.conf:
             period = dag_run.conf.get('period', DEFAULT_PERIOD)
         
-        print(f"📊 Fetching data for symbols: {STOCK_SYMBOLS}")
-        print(f"📅 Period: {period}")
+        print(f" Fetching data for symbols: {STOCK_SYMBOLS}")
+        print(f" Period: {period}")
         
         # Initialize the Yahoo Finance stock fetcher
         fetcher = YahooStockDataFetcher()
@@ -323,7 +323,6 @@ def validate_data_freshness(**context):
 
 
 # Define Tasks
-# =============
 
 # Task 1: Check Yahoo Finance API Connection
 check_api_task = PythonOperator(
@@ -412,7 +411,7 @@ freshness_task = PythonOperator(
 )
 
 # Define Task Dependencies
-# ========================
+
 
 # Parallel checks → Data fetch → Parallel validations
 [check_api_task, check_db_task] >> fetch_data_task >> [summary_task, data_quality_task, freshness_task]
