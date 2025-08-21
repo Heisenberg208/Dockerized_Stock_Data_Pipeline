@@ -90,7 +90,7 @@ Before you begin, ensure you have these installed on your system:
 git clone https://github.com/yourusername/yahoo-finance-pipeline.git
 
 # Navigate to the project directory
-cd yahoo-finance-pipeline
+cd stock-pipeline
 ```
 
 ### ⚙️ Step 2: Environment Setup
@@ -121,7 +121,6 @@ docker-compose up -d
 docker-compose ps
 ```
 
-
 ### 🌐 Step 4: Access the Applications
 
 | Service | URL | Credentials |
@@ -143,7 +142,7 @@ docker-compose ps
 
 ### 📈 Default Stock Symbols
 
-The pipeline comes pre-configured to fetch data for these Indian stocks can be customise to other stocks as per requirements:
+The pipeline comes pre-configured to fetch data for these Indian stocks can be customised to other stocks as per requirements:
 - **RELIANCE.NS** - Reliance Industries
 - **TCS.NS** - Tata Consultancy Services  
 - **INFY.NS** - Infosys Limited
@@ -223,14 +222,14 @@ CREATE TABLE IF NOT EXISTS stock_data (
 3. Add server with these details:
    - Host: `postgres`
    - Port: `5432`
-   - Database: `stockata` # set up in .env
+   - Database: `stockdata` # set up in .env
    - Username: `airflow` # set up in .env
    - Password: `airflow123` # set up in .env
 
 **Via Command Line:**
 ```bash
 # Connect to PostgreSQL container
-docker exec -it yahoo-finance-pipeline-postgres-1 psql -U airflow -d airflow
+docker exec -it stock_pipeline-postgres-1 psql -U airflow -d stockdata
 
 # View stock data
 SELECT * FROM stock_data LIMIT 10;
@@ -264,41 +263,6 @@ EMAIL_ON_FAILURE = True
 
 ---
 
-## 📈 Sample Data Output
-
-### 📊 Expected Data Format
-
-```json
-{
-  "symbol": "RELIANCE.NS",
-  "date_recorded": "2024-01-15",
-  "open_price": 2456.30,
-  "high_price": 2478.95,
-  "low_price": 2445.60,
-  "close_price": 2467.85,
-  "volume": 5247830
-}
-```
-
-### 📋 Sample Pipeline Report
-
-```
-================================================================================
-📈 YAHOO FINANCE STOCK DATA PIPELINE SUMMARY
-================================================================================
-Symbol   Records  From        To          Avg Price    Updated
---------------------------------------------------------------------------------
-INFY.NS  67       2024-10-01  2024-12-31  $1,456.23    2024-12-31 15:30
-TCS.NS   67       2024-10-01  2024-12-31  $3,234.56    2024-12-31 15:30
-RELIANCE 67       2024-10-01  2024-12-31  $2,567.89    2024-12-31 15:30
-
-📊 Total records in database: 536
-🔄 Records updated in last 24 hours: 8
-================================================================================
-```
-
----
-
 ## 🐛 Troubleshooting Guide
 
 ### ❌ Common Issues and Solutions
@@ -311,12 +275,6 @@ docker-compose ps
 # Restart services if needed
 docker-compose down
 docker-compose up -d
-```
-
-#### **Issue: "Permission denied" errors**
-```bash
-# Fix file permissions (Linux/Mac)
-sudo chown -R $USER:$USER .
 ```
 
 #### **Issue: "Out of disk space"**
@@ -377,7 +335,6 @@ Expected performance metrics:
 
 
 
-
 ### 🔒 Security Best Practices
 
 1. **Change default passwords** in production
@@ -388,6 +345,7 @@ Expected performance metrics:
 
 ---
 
+<!-- test change -->
 
 
 
