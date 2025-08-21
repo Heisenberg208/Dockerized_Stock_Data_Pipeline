@@ -7,7 +7,7 @@ CREATE DATABASE airflow;
 -- Create the stock_data table
 CREATE TABLE IF NOT EXISTS stock_data (
     id SERIAL PRIMARY KEY,
-    symbol VARCHAR(10) NOT NULL,
+    symbol VARCHAR(30) NOT NULL,
     date_recorded DATE NOT NULL,
     open_price DOUBLE PRECISION,
     high_price DOUBLE PRECISION,
