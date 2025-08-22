@@ -4,10 +4,9 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.operators.postgres import PostgresOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 import sys
-import os
 import requests
 
-sys.path.insert(0, '/opt/airflow/scripts')
+sys.path.insert(0, "/opt/airflow/scripts")
 
 # Import  custom Yahoo Finance stock fetcher
 from stock_fetcher import YahooStockDataFetcher
@@ -18,30 +17,29 @@ from stock_fetcher import YahooStockDataFetcher
 
 # Stock symbols to fetch (customize as needed)
 STOCK_SYMBOLS = [
-    'RELIANCE.NS',
-    'TCS.NS',
-    'INFY.NS',
-    'HDFCBANK.NS',
-    'ICICIBANK.NS',
-    'HINDUNILVR.NS',
-    'SBIN.NS',
-    'BAJFINANCE.NS'
+    "RELIANCE.NS",
+    "TCS.NS",
+    "INFY.NS",
+    "HDFCBANK.NS",
+    "ICICIBANK.NS",
+    "HINDUNILVR.NS",
+    "SBIN.NS",
+    "BAJFINANCE.NS",
 ]
-
 
 
 # Data period to fetch from Yahoo Finance API
 # Options: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'
-DEFAULT_PERIOD = '3mo'
+DEFAULT_PERIOD = "3mo"
 # Data fetch interval (granularity of stock data)
-DATA_INTERVAL = '1d'  # or ['1m', 5m,'1h','1d','1wk','1mo']
+DATA_INTERVAL = "1d"  # or ['1m', 5m,'1h','1d','1wk','1mo']
 
 # ========================================
 # SCHEDULING CONFIGURATION
 # ========================================
 
 # DAG Start Date Options:
-# Option 1: Start Date 
+# Option 1: Start Date
 DAG_START_DATE = datetime.now()
 
 # Option 2: Start from specific date (uncomment to use)
@@ -56,11 +54,11 @@ DAG_START_DATE = datetime.now()
 
 # Choose your schedule (uncomment ONE option):
 
-# Daily scheduling (recommended for stock data) 
+# Daily scheduling (recommended for stock data)
 # SCHEDULE_INTERVAL = '@daily' # Runs everyay at 5:30pm IST an 00:00 UTC
 
 # Hourly scheduling (for more frequent updates)
-SCHEDULE_INTERVAL = '@hourly'
+SCHEDULE_INTERVAL = "@hourly"
 
 # Custom cron expressions:
 # SCHEDULE_INTERVAL = '0 9 * * 1-5'    # 9 AM, Monday to Friday
@@ -96,49 +94,48 @@ RETRY_DELAY_MINUTES = 5
 
 # Default arguments for the DAG
 default_args = {
-    'owner': 'data-team',
-    'depends_on_past': False,
-    'start_date': DAG_START_DATE,
-    'email_on_failure': EMAIL_ON_FAILURE,
-    'email_on_retry': EMAIL_ON_RETRY,
-    'retries': RETRIES,
-    'retry_delay': timedelta(minutes=RETRY_DELAY_MINUTES),
-    'catchup': ENABLE_CATCHUP
+    "owner": "data-team",
+    "depends_on_past": False,
+    "start_date": DAG_START_DATE,
+    "email_on_failure": EMAIL_ON_FAILURE,
+    "email_on_retry": EMAIL_ON_RETRY,
+    "retries": RETRIES,
+    "retry_delay": timedelta(minutes=RETRY_DELAY_MINUTES),
+    "catchup": ENABLE_CATCHUP,
 }
 
 # Create the DAG
 dag = DAG(
-    'yahoo_stock_data_pipeline',
+    "yahoo_stock_data_pipeline",
     default_args=default_args,
-    description='Simplified pipeline to fetch and store stock data from Yahoo Finance',
+    description="Simplified pipeline to fetch and store stock data from Yahoo Finance",
     schedule_interval=SCHEDULE_INTERVAL,
     max_active_runs=MAX_ACTIVE_RUNS,
-    tags=['stock', 'yahoo-finance', 'etl']
+    tags=["stock", "yahoo-finance", "etl"],
 )
-
 
 
 def check_yahoo_api_connection(**context):
     """Check if Yahoo Finance API is accessible"""
     print("🔍 Testing Yahoo Finance API connection...")
-    
+
     url = "https://query1.finance.yahoo.com/v8/finance/chart/AAPL"
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
-    params = {'range': '1d', 'interval': '1d'}
-    
+    params = {"range": "1d", "interval": "1d"}
+
     try:
         response = requests.get(url, params=params, headers=headers, timeout=15)
         response.raise_for_status()
         data = response.json()
-        
-        if 'chart' not in data or not data['chart']['result']:
+
+        if "chart" not in data or not data["chart"]["result"]:
             raise Exception("Invalid response format from Yahoo Finance")
-        
+
         print("✅ Yahoo Finance API connection successful")
         return True
-        
+
     except Exception as e:
         print(f"❌ Yahoo Finance API connection failed: {e}")
         raise
@@ -147,45 +144,49 @@ def check_yahoo_api_connection(**context):
 def check_database_connection(**context):
     """Check PostgreSQL database connection and verify table"""
     print("🔍 Testing database connection...")
-    
+
     try:
-        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
+        pg_hook = PostgresHook(postgres_conn_id="postgres_default")
         conn = pg_hook.get_conn()
         cursor = conn.cursor()
-        
+
         # Check if stock_data table exists
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_name = 'stock_data'
             );
-        """)
-        
+        """
+        )
+
         table_exists = cursor.fetchone()[0]
-        
+
         if table_exists:
             print("✅ stock_data table exists")
-            
+
             # Show table structure
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT column_name, data_type 
                 FROM information_schema.columns 
                 WHERE table_name = 'stock_data'
                 ORDER BY ordinal_position;
-            """)
-            
+            """
+            )
+
             columns = cursor.fetchall()
             print("📋 Table structure:")
             for col_name, col_type in columns:
                 print(f"   • {col_name}: {col_type}")
         else:
             print("⚠️  stock_data table does not exist - will be created if needed")
-        
+
         cursor.close()
         conn.close()
         print("✅ Database connection verified")
         return True
-        
+
     except Exception as e:
         print(f" Database connection failed: {e}")
         raise
@@ -194,31 +195,31 @@ def check_database_connection(**context):
 def fetch_and_store_stock_data(**context):
     """Main task to fetch and store stock data from Yahoo Finance"""
     print(" Starting stock data fetch and store process...")
-    
+
     try:
         # Get period from DAG run config or use default
-        dag_run = context.get('dag_run')
+        dag_run = context.get("dag_run")
         period = DEFAULT_PERIOD
-        interval=DATA_INTERVAL
-        
+        interval = DATA_INTERVAL
+
         if dag_run and dag_run.conf:
-            period = dag_run.conf.get('period', DEFAULT_PERIOD)
-        
+            period = dag_run.conf.get("period", DEFAULT_PERIOD)
+
         print(f" Fetching data for symbols: {STOCK_SYMBOLS}")
         print(f" Period: {period}")
         print(f" Interval: {interval}")
         # Initialize the Yahoo Finance stock fetcher
         fetcher = YahooStockDataFetcher()
-        
+
         # Run the pipeline
-        success = fetcher.run_pipeline(STOCK_SYMBOLS, period,interval)
-        
+        success = fetcher.run_pipeline(STOCK_SYMBOLS, period, interval)
+
         if not success:
             raise Exception("Stock data pipeline completed with errors")
-        
+
         print("✅ Stock data pipeline completed successfully")
         return True
-        
+
     except Exception as e:
         print(f"❌ Stock data pipeline failed: {e}")
         raise
@@ -227,14 +228,15 @@ def fetch_and_store_stock_data(**context):
 def generate_summary_report(**context):
     """Generate a summary report of the data update"""
     print("📋 Generating summary report...")
-    
+
     try:
-        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
+        pg_hook = PostgresHook(postgres_conn_id="postgres_default")
         conn = pg_hook.get_conn()
         cursor = conn.cursor()
-        
+
         # Get summary statistics by symbol
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT 
                 symbol, 
                 COUNT(*) as record_count,
@@ -246,42 +248,49 @@ def generate_summary_report(**context):
             WHERE date_recorded >= CURRENT_DATE - INTERVAL '60 days'  -- Last 2 months
             GROUP BY symbol 
             ORDER BY symbol;
-        """)
-        
+        """
+        )
+
         results = cursor.fetchall()
-        
+
         print("\n" + "=" * 80)
         print("📈 YAHOO FINANCE STOCK DATA PIPELINE SUMMARY")
         print("=" * 80)
-        
+
         if results:
-            print(f"{'Symbol':<8} {'Records':<8} {'From':<12} {'To':<12} {'Avg Price':<12} {'Updated'}")
+            print(
+                f"{'Symbol':<8} {'Records':<8} {'From':<12} {'To':<12} {'Avg Price':<12} {'Updated'}"
+            )
             print("-" * 80)
-            
+
             for symbol, count, earliest, latest, avg_price, updated in results:
                 avg_price_str = f"${avg_price}" if avg_price else "N/A"
-                print(f"{symbol:<8} {count:<8} {earliest} {latest} {avg_price_str:<12} {updated.strftime('%Y-%m-%d %H:%M')}")
+                print(
+                    f"{symbol:<8} {count:<8} {earliest} {latest} {avg_price_str:<12} {updated.strftime('%Y-%m-%d %H:%M')}"
+                )
         else:
             print("⚠️  No recent data found in stock_data table")
-        
+
         # Get total statistics
         cursor.execute("SELECT COUNT(*) FROM stock_data;")
         total_count = cursor.fetchone()[0]
-        
-        cursor.execute("""
+
+        cursor.execute(
+            """
             SELECT COUNT(*) FROM stock_data 
             WHERE updated_at >= NOW() - INTERVAL '24 hours';
-        """)
+        """
+        )
         recent_updates = cursor.fetchone()[0]
-        
+
         print(f"\n📊 Total records in database: {total_count:,}")
         print(f"🔄 Records updated in last 24 hours: {recent_updates}")
         print("=" * 80 + "\n")
-        
+
         cursor.close()
         conn.close()
         return True
-        
+
     except Exception as e:
         print(f"❌ Failed to generate summary report: {e}")
         raise
@@ -290,14 +299,15 @@ def generate_summary_report(**context):
 def validate_data_freshness(**context):
     """Validate that we have recent data for key symbols"""
     print("🔍 Validating data freshness...")
-    
+
     try:
-        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
+        pg_hook = PostgresHook(postgres_conn_id="postgres_default")
         conn = pg_hook.get_conn()
         cursor = conn.cursor()
-        
+
         # Check for stale data (older than 5 days for key symbols)
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT 
                 symbol,
                 MAX(date_recorded) AS latest_date,
@@ -306,21 +316,22 @@ def validate_data_freshness(**context):
             WHERE symbol IN ('AAPL', 'GOOGL', 'MSFT', 'TSLA')
             GROUP BY symbol
             HAVING (CURRENT_DATE - MAX(date_recorded)) > INTERVAL '5 days';
-        """)
-        
+        """
+        )
+
         stale_data = cursor.fetchall()
-        
+
         if stale_data:
             print("⚠️  Warning: Stale data detected for key symbols:")
             for symbol, latest_date, days_old in stale_data:
                 print(f"   • {symbol}: {days_old} days old (latest: {latest_date})")
         else:
             print("✅ All key symbols have recent data (within 5 days)")
-        
+
         cursor.close()
         conn.close()
         return True
-        
+
     except Exception as e:
         print(f"❌ Data freshness validation failed: {e}")
         raise
@@ -330,36 +341,34 @@ def validate_data_freshness(**context):
 
 # Task 1: Check Yahoo Finance API Connection
 check_api_task = PythonOperator(
-    task_id='check_yahoo_api_connection',
+    task_id="check_yahoo_api_connection",
     python_callable=check_yahoo_api_connection,
-    dag=dag
+    dag=dag,
 )
 
 # Task 2: Check Database Connection
 check_db_task = PythonOperator(
-    task_id='check_database_connection',
+    task_id="check_database_connection",
     python_callable=check_database_connection,
-    dag=dag
+    dag=dag,
 )
 
 # Task 3: Fetch and Store Stock Data
 fetch_data_task = PythonOperator(
-    task_id='fetch_and_store_stock_data',
+    task_id="fetch_and_store_stock_data",
     python_callable=fetch_and_store_stock_data,
-    dag=dag
+    dag=dag,
 )
 
 # Task 4: Generate Summary Report
 summary_task = PythonOperator(
-    task_id='generate_summary_report',
-    python_callable=generate_summary_report,
-    dag=dag
+    task_id="generate_summary_report", python_callable=generate_summary_report, dag=dag
 )
 
 # Task 5: Data Quality Check
 data_quality_task = PostgresOperator(
-    task_id='data_quality_check',
-    postgres_conn_id='postgres_default',
+    task_id="data_quality_check",
+    postgres_conn_id="postgres_default",
     sql="""
         -- 🔍 Data Quality Checks for Recent Yahoo Finance Data
         WITH quality_metrics AS (
@@ -404,18 +413,20 @@ data_quality_task = PostgresOperator(
         FROM quality_metrics
         ORDER BY symbol;
     """,
-    dag=dag
+    dag=dag,
 )
 
 # Task 6: Data Freshness Validation
 freshness_task = PythonOperator(
-    task_id='validate_data_freshness',
-    python_callable=validate_data_freshness,
-    dag=dag
+    task_id="validate_data_freshness", python_callable=validate_data_freshness, dag=dag
 )
 
 # Define Task Dependencies
 
 
 # Parallel checks → Data fetch → Parallel validations
-[check_api_task, check_db_task] >> fetch_data_task >> [summary_task, data_quality_task, freshness_task]
+(
+    [check_api_task, check_db_task]
+    >> fetch_data_task
+    >> [summary_task, data_quality_task, freshness_task]
+)

@@ -95,7 +95,10 @@ AIRFLOW__CORE__FERNET_KEY= # Generate and paste fernet key using below command i
 ### Step 3: Launch the Application
 
 ```bash
-# Build and start all services (this may take 5-10 minutes on first run)
+# Build images (installs requirements, ensures fresh build)
+docker-compose build --no-cache
+
+# Start all services in detached mode
 docker-compose up -d
 
 # Check if all services are running
@@ -245,7 +248,18 @@ FROM stock_data
 
 ---
 
+## 📸 Demo
 
+Here are some screenshots from the running pipeline:
+
+### Airflow Web UI
+![Airflow UI](assets/airflow_ui.png)
+
+### PgAdmin Database
+![PgAdmin](assets/pgadmin_db.png)
+
+### Pipeline Logs
+![Logs](assets/logs.png)
 
 ## Troubleshooting Guide
 
