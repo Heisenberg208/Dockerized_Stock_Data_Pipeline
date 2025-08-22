@@ -310,6 +310,7 @@ def main():
         # Parse command line arguments
         symbols = []
         period = "3mo"  # Default period
+        interval = "1d"
 
         # Simple argument parsing
         args = sys.argv[1:]
@@ -330,7 +331,7 @@ def main():
 
         # Initialize and run the fetcher
         fetcher = YahooStockDataFetcher()
-        success = fetcher.run_pipeline(symbols, period)
+        success = fetcher.run_pipeline(symbols, period, interval)
 
         # Exit with appropriate code
         sys.exit(0 if success else 1)
