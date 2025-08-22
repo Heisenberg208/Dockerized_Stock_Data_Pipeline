@@ -7,9 +7,7 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13+-blue.svg)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg)
 
-##  Project Overview
 
-This project demonstrates a **complete ETL (Extract, Transform, Load) pipeline** that automatically fetches stock market data from Yahoo Finance, processes it, and stores it in a PostgreSQL database. Built with industry best practices, this pipeline showcases skills essential for **Data Engineering**, **DevOps**, and **Financial Technology** roles.
 
 ###  Key Highlights
 
@@ -41,18 +39,17 @@ graph TD
 ## 📁 Project Structure
 
 ```
-yahoo-finance-pipeline/
+Dockerized_Stock_Data_Pipeline/
 ├── 📁 dags/                          # Airflow DAG files
-│   └── yahoo_stock_pipeline.py       # Main pipeline DAG
+│   └── stock_data_pipeline.py        # Main pipeline DAG
 ├── 📁 scripts/                       # Custom Python modules
-│   └── stock_fetcher.py              # Yahoo Finance data fetcher
-├── 📁 docker/                        # Docker configuration
-│   ├── Dockerfile                    # Main container image
-│   └── requirements.txt              # Python dependencies
+│   └── stock_fetcher.py              # Yahoo Finance data fetcher                       
+├── Dockerfile                        # Main container image
+│── requirements.txt                  # Python dependencies
 ├── 📄 docker-compose.yml             # Multi-container setup
 ├── 📄 .env.example                   # Environment variables template
 ├── 📄 init.sql                       # Database initialization
-└── 📄 README.md                      # This file
+└── 📄 Readme.md                      # This file
 ```
 
 ---
@@ -64,20 +61,16 @@ yahoo-finance-pipeline/
 Before you begin, ensure you have these installed on your system:
 
 - **Docker** (version 20.0+) - [Download here](https://www.docker.com/products/docker-desktop)
-- **Docker Compose** (version 2.0+) - Usually comes with Docker Desktop
-- **Git** - [Download here](https://git-scm.com/downloads)
-- At least **4GB RAM** and **5GB free disk space**
-
-> 💡 **New to Docker?** Don't worry! Docker allows us to run the entire application in isolated containers, making setup incredibly simple.
+- **Docker Compose** (version 2.0+) - Usually comes with Docker Desktop.
 
 ###  Step 1: Clone the Repository
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/yahoo-finance-pipeline.git
+git clone https://github.com/Heisenberg208/Dockerized_Stock_Data_Pipeline.git
 
 # Navigate to the project directory
-cd stock-pipeline
+cd Dockerized_Stock_Data_Pipeline
 ```
 
 ### Step 2: Environment Setup
@@ -235,7 +228,7 @@ SELECT symbol, COUNT(*), MAX(date_recorded)
 FROM stock_data 
 GROUP BY symbol;
 
-# Time is recorerded is UTC time zone to convert to IST use:
+# Time is recorerded is UTC time zone, to convert to IST use:
 SELECT 
     id,
     symbol,
@@ -314,15 +307,9 @@ SELECT COUNT(*) FROM stock_data WHERE high_price < low_price;
 SELECT symbol, AVG(volume) FROM stock_data GROUP BY symbol;
 ```
 
-###  Performance Benchmarks
 
-Expected performance metrics:
-- **Pipeline Execution Time**: 2-5 minutes for 8 stocks
-- **Data Processing Rate**: ~100 records per second  
-- **Storage Growth**: ~50MB per month for daily data
-- **Memory Usage**: <512MB per container
 
----
+
 
 
 
@@ -330,9 +317,8 @@ Expected performance metrics:
 
 1. **Change default passwords** in production
 2. **Use environment-specific secrets**
-3. **Enable SSL/TLS** for web interfaces
-4. **Implement network segmentation**
-5. **Regular security updates**
+3. **Implement network segmentation**
+4. **Regular security updates**
 
 ---
 
