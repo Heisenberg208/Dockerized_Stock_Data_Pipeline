@@ -287,8 +287,8 @@ class YahooStockDataFetcher:
                     logger.error(f"Failed to update database for {symbol}")
                     overall_success = False
 
-                # Small delay to be respectful to Yahoo Finance
-                time.sleep(5)
+                # Small delay to handle rate limits
+                time.sleep(1)
 
             except Exception as e:
                 logger.error(f"Pipeline failed for {symbol}: {e}")
