@@ -55,10 +55,10 @@ DAG_START_DATE = datetime.now()
 # Choose your schedule (uncomment ONE option):
 
 # Daily scheduling (recommended for stock data)
-# SCHEDULE_INTERVAL = '@daily' # Runs everyay at 5:30pm IST an 00:00 UTC
+SCHEDULE_INTERVAL = "@daily"  # Runs everyay at 5:30pm IST an 00:00 UTC
 
 # Hourly scheduling (for more frequent updates)
-SCHEDULE_INTERVAL = "@hourly"
+# SCHEDULE_INTERVAL = "@hourly"
 
 # Custom cron expressions:
 # SCHEDULE_INTERVAL = '0 9 * * 1-5'    # 9 AM, Monday to Friday

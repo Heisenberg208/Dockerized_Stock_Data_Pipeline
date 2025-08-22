@@ -246,30 +246,6 @@ class YahooStockDataFetcher:
             if conn:
                 conn.close()
 
-    def get_stock_info(self, symbol: str) -> Optional[Dict]:
-        """
-        Get basic stock information (optional method for additional data)
-        """
-        try:
-            url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}"
-            params = {"modules": "price,summaryDetail,assetProfile"}
-
-            response = requests.get(
-                url, params=params, headers=self.headers, timeout=30
-            )
-            response.raise_for_status()
-
-            data = response.json()
-
-            if "quoteSummary" in data and data["quoteSummary"]["result"]:
-                return data["quoteSummary"]["result"][0]
-
-            return None
-
-        except Exception as e:
-            logger.error(f"Error fetching stock info for {symbol}: {e}")
-            return None
-
     def run_pipeline(
         self, symbols: List[str] = None, period: str = "3mo", interval: str = "1d"
     ) -> bool:
