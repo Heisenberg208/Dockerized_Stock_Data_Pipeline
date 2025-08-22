@@ -32,7 +32,7 @@ STOCK_SYMBOLS = [
 # Options: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'
 DEFAULT_PERIOD = "3mo"
 # Data fetch interval (granularity of stock data)
-DATA_INTERVAL = "1d"  # or ['1m', 5m,'1h','1d','1wk','1mo']
+DATA_INTERVAL = "1d"  # or ['1m', '5m','1h','1d','1wk','1mo']
 
 # ========================================
 # SCHEDULING CONFIGURATION
@@ -54,10 +54,10 @@ DAG_START_DATE = datetime.now()
 
 # Choose your schedule (uncomment ONE option):
 
-# Daily scheduling (recommended for stock data)
+# Daily scheduling 
 SCHEDULE_INTERVAL = "@daily"  # Runs everyay at 5:30pm IST an 00:00 UTC
 
-# Hourly scheduling (for more frequent updates)
+# Hourly scheduling 
 # SCHEDULE_INTERVAL = "@hourly"
 
 # Custom cron expressions:
