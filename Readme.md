@@ -1,6 +1,6 @@
 #  Dockerized Stock Data Pipeline with Airflow
 
-> **This project implements a robust, scalable data pipeline that automatically fetches stock market data from the Alpha Vantage API and stores it in a PostgreSQL database using Apache Airflow for orchestration.**
+> **This project implements a robust, scalable data pipeline that automatically fetches stock market data from the Yahoo Finance API and stores it in a PostgreSQL database using Apache Airflow for orchestration.**
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-2.7+-green.svg)
