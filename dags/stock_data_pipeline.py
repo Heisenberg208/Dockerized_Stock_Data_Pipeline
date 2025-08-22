@@ -34,7 +34,7 @@ STOCK_SYMBOLS = [
 # Options: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'
 DEFAULT_PERIOD = '3mo'
 # Data fetch interval (granularity of stock data)
-DATA_INTERVAL = '1d'  # or ['5m,'1h','1d','1wk','1mo']
+DATA_INTERVAL = '1d'  # or ['1m', 5m,'1h','1d','1wk','1mo']
 
 # ========================================
 # SCHEDULING CONFIGURATION

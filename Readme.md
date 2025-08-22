@@ -1,8 +1,8 @@
-# 📈 Dockerized Stock Data Pipeline with Airflow
+#  Dockerized Stock Data Pipeline with Airflow
 
 > **This project implements a robust, scalable data pipeline that automatically fetches stock market data from the Alpha Vantage API and stores it in a PostgreSQL database using Apache Airflow for orchestration.**
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-2.7+-green.svg)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13+-blue.svg)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg)
@@ -23,6 +23,7 @@ This project demonstrates a **complete ETL (Extract, Transform, Load) pipeline**
 
 ---
 
+
 ##Architecture Overview
 
 ```mermaid
@@ -36,19 +37,6 @@ graph TD
     H[PgAdmin] -->|Database Management| D
 ```
 
-### 🔧 Technology Stack
-
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Orchestration** | Apache Airflow | Workflow management and scheduling |
-| **Database** | PostgreSQL 13 | Data storage and management |
-| **Containerization** | Docker & Docker Compose | Environment consistency |
-| **Data Source** | Yahoo Finance API | Stock market data |
-| **Language** | Python 3.9+ | Core development language |
-| **Message Queue** | Redis | Task queue for Airflow |
-| **Monitoring** | PgAdmin | Database administration |
-
----
 
 ## 📁 Project Structure
 
@@ -96,7 +84,10 @@ cd stock-pipeline
 
 ```bash
 # Copy the environment template
+# powershell or linux
 cp .env.example .env
+# winows CMD
+copy .env.example .env
 
 # Open the .env file and change values as mentioned further
 # Preffered not to touch the Default values
@@ -105,11 +96,9 @@ cp .env.example .env
 **Environment Variables Explained:**
 The only variable you nee to set up in `.env`.
 ```bash 
-AIRFLOW__CORE__FERNET_KEY= # Generate an paste fernet key using below command 
-"python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-
+AIRFLOW__CORE__FERNET_KEY= # Generate and paste fernet key using below command in terminal
 ```
-
+>`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 ### Step 3: Launch the Application
 
 ```bash
@@ -174,10 +163,12 @@ The pipeline includes comprehensive quality validation:
 
 ### Scheduling Options
 
-Choose from multiple scheduling patterns:
+Choose from multiple scheduling Patterns:
 
 ```python
-# Daily (recommended for stock data)
+#DAG
+
+# Daily 
 SCHEDULE_INTERVAL = '@daily'
 
 # Weekdays only (9 AM)
@@ -188,6 +179,14 @@ SCHEDULE_INTERVAL = '0 */4 * * *'
 
 # Manual trigger only
 SCHEDULE_INTERVAL = None
+
+# STOCK_DATA
+
+# Data period to fetch from Yahoo Finance API
+# Options: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'
+DEFAULT_PERIOD = '3mo'
+# Data fetch interval (granularity of stock data)
+DATA_INTERVAL = '1d'  # or ['5m,'1h','1d','1wk','1mo']
 ```
 
 ---
@@ -200,7 +199,7 @@ SCHEDULE_INTERVAL = None
 CREATE TABLE IF NOT EXISTS stock_data (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(30) NOT NULL,
-    date_recorded DATE NOT NULL,
+    date_recorded TIMESTAMP NOT NULL, -- <-- keep full datetime: helpful for intraday
     open_price DOUBLE PRECISION,
     high_price DOUBLE PRECISION,
     low_price DOUBLE PRECISION,
@@ -208,9 +207,7 @@ CREATE TABLE IF NOT EXISTS stock_data (
     volume BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(symbol, date_recorded)
-
-);
+    UNIQUE(symbol, date_recorded) 
 ```
 
 ### Accessing the Database
@@ -228,7 +225,7 @@ CREATE TABLE IF NOT EXISTS stock_data (
 **Via Command Line:**
 ```bash
 # Connect to PostgreSQL container
-docker exec -it stock_pipeline-postgres-1 psql -U airflow -d stockdata
+docker exec -it dockerized_stock_data_pipeline-postgres-1 psql -U airflow -d stockdata 
 
 # View stock data
 SELECT * FROM stock_data LIMIT 10;
@@ -237,30 +234,25 @@ SELECT * FROM stock_data LIMIT 10;
 SELECT symbol, COUNT(*), MAX(date_recorded) 
 FROM stock_data 
 GROUP BY symbol;
+
+# Time is recorerded is UTC time zone to convert to IST use:
+SELECT 
+    id,
+    symbol,
+    date_recorded AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata' AS date_recorded_ist,
+    open_price,
+    high_price,
+    low_price,
+    close_price,
+    volume,
+    created_at,
+    updated_at
+FROM stock_data
 ```
 
 ---
 
-## Advanced Configuration
 
-### Customizing Data Fetching
-
-Edit `/dags/stock_data_pipeline.py` to modify:
-
-```python
-# Change data period
-DEFAULT_PERIOD = '1y'  # Options: '1d', '1mo', '3mo', '6mo', '1y', '5y'
-
-# Modify retry settings
-RETRIES = 3
-RETRY_DELAY_MINUTES = 10
-
-# Enable email notifications
-EMAIL_ON_FAILURE = True
-```
-
-
----
 
 ## Troubleshooting Guide
 
@@ -288,7 +280,7 @@ docker volume prune
 - Check internet connectivity
 - API might be temporarily down (try again later)
 
-### 📊 Health Checks
+###  Health Checks
 
 ```bash
 # Check container health
@@ -304,13 +296,13 @@ docker stats
 
 ---
 
-## 🧪 Testing the Pipeline
+##  Testing the Pipeline
 
-### 🔍 Data Validation Tests
+###  Data Validation Tests
 
 ```bash
 # Connect to database and run validation queries
-docker exec -it stock_pipeline-postgres-1 psql -U airflow -d stockdata
+docker exec -it dockerized_stock_data_pipeline-postgres-1 psql -U airflow -d stockdata 
 
 # Check data freshness (should return recent dates)
 SELECT symbol, MAX(date_recorded) FROM stock_data GROUP BY symbol;
@@ -322,7 +314,7 @@ SELECT COUNT(*) FROM stock_data WHERE high_price < low_price;
 SELECT symbol, AVG(volume) FROM stock_data GROUP BY symbol;
 ```
 
-### ⚡ Performance Benchmarks
+###  Performance Benchmarks
 
 Expected performance metrics:
 - **Pipeline Execution Time**: 2-5 minutes for 8 stocks
@@ -334,7 +326,7 @@ Expected performance metrics:
 
 
 
-### 🔒 Security Best Practices
+###  Security Best Practices
 
 1. **Change default passwords** in production
 2. **Use environment-specific secrets**
