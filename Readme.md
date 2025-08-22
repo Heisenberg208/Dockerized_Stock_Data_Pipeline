@@ -1,30 +1,29 @@
-# 📈 Yahoo Finance Stock Data Pipeline
+# 📈 Dockerized Stock Data Pipeline with Airflow
 
-> **A production-ready, automated data pipeline for fetching, processing, and storing stock market data using Apache Airflow, PostgreSQL, and Yahoo Finance API**
+> **This project implements a robust, scalable data pipeline that automatically fetches stock market data from the Alpha Vantage API and stores it in a PostgreSQL database using Apache Airflow for orchestration.**
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
 ![Apache Airflow](https://img.shields.io/badge/Apache%20Airflow-2.7+-green.svg)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-13+-blue.svg)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-## 🎯 Project Overview
+##  Project Overview
 
 This project demonstrates a **complete ETL (Extract, Transform, Load) pipeline** that automatically fetches stock market data from Yahoo Finance, processes it, and stores it in a PostgreSQL database. Built with industry best practices, this pipeline showcases skills essential for **Data Engineering**, **DevOps**, and **Financial Technology** roles.
 
-### 🌟 Key Highlights
+###  Key Highlights
 
-- **🔄 Automated Data Pipeline**: Runs daily to fetch fresh stock market data
-- **🏗️ Production Architecture**: Uses Apache Airflow for orchestration with proper error handling
-- **📊 Data Quality Assurance**: Built-in validation and quality checks
-- **🐳 Containerized Deployment**: Complete Docker setup for easy deployment
-- **📈 Real Financial Data**: Fetches data from Yahoo Finance API for Indian stock market (NSE)
-- **🔍 Monitoring & Reporting**: Comprehensive logging and summary reports
-- **⚡ Scalable Design**: Easily extensible to handle more symbols and data sources
+- **Automated Data Pipeline**: Runs daily to fetch fresh stock market data
+- **Production Architecture**: Uses Apache Airflow for orchestration with proper error handling
+- **Data Quality Assurance**: Built-in validation and quality checks
+- **Containerized Deployment**: Complete Docker setup for easy deployment
+- **Real Financial Data**: Fetches data from Yahoo Finance API for Indian stock market (NSE)
+- **Monitoring & Reporting**: Comprehensive logging and summary reports
+- **Scalable Design**: Easily extensible to handle more symbols and data sources
 
 ---
 
-## 🏗️ Architecture Overview
+##Architecture Overview
 
 ```mermaid
 graph TD
@@ -70,7 +69,7 @@ yahoo-finance-pipeline/
 
 ---
 
-## 🚀 Quick Start Guide
+## Quick Start Guide
 
 ### Prerequisites
 
@@ -83,7 +82,7 @@ Before you begin, ensure you have these installed on your system:
 
 > 💡 **New to Docker?** Don't worry! Docker allows us to run the entire application in isolated containers, making setup incredibly simple.
 
-### 📥 Step 1: Clone the Repository
+###  Step 1: Clone the Repository
 
 ```bash
 # Clone the repository
@@ -93,7 +92,7 @@ git clone https://github.com/yourusername/yahoo-finance-pipeline.git
 cd stock-pipeline
 ```
 
-### ⚙️ Step 2: Environment Setup
+### Step 2: Environment Setup
 
 ```bash
 # Copy the environment template
@@ -111,7 +110,7 @@ AIRFLOW__CORE__FERNET_KEY= # Generate an paste fernet key using below command
 
 ```
 
-### 🐳 Step 3: Launch the Application
+### Step 3: Launch the Application
 
 ```bash
 # Build and start all services (this may take 5-10 minutes on first run)
@@ -121,7 +120,7 @@ docker-compose up -d
 docker-compose ps
 ```
 
-### 🌐 Step 4: Access the Applications
+### Step 4: Access the Applications
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
@@ -130,9 +129,9 @@ docker-compose ps
 
 ---
 
-## 📊 Using the Pipeline
+## Using the Pipeline
 
-### 🎮 Running Your First Pipeline
+### Running Your First Pipeline
 
 1. **Open Airflow Web UI**: Navigate to http://localhost:8080
 2. **Login**: Use username `admin` and password `admin`
@@ -140,7 +139,7 @@ docker-compose ps
 4. **Enable the DAG**: Toggle the switch to turn it "On"
 5. **Trigger Manually**: Click the "▶️" button to run immediately
 
-### 📈 Default Stock Symbols
+### Default Stock Symbols
 
 The pipeline comes pre-configured to fetch data for these Indian stocks can be customised to other stocks as per requirements:
 - **RELIANCE.NS** - Reliance Industries
@@ -155,9 +154,9 @@ The pipeline comes pre-configured to fetch data for these Indian stocks can be c
 
 ---
 
-## 🛠️ Pipeline Features
+## Pipeline Features
 
-### 🔍 Data Quality Checks
+### Data Quality Checks
 
 The pipeline includes comprehensive quality validation:
 
@@ -166,14 +165,14 @@ The pipeline includes comprehensive quality validation:
 - **Freshness Checks**: Ensures data is recent and up-to-date
 - **Negative Value Detection**: Flags impossible negative prices/volumes
 
-### 📋 Monitoring & Reporting
+### Monitoring & Reporting
 
 - **Real-time Logs**: View detailed execution logs in Airflow UI
 - **Summary Reports**: Automatic generation of data statistics
 - **Error Notifications**: Built-in retry mechanisms and error handling
 - **Database Metrics**: Track data volume and update frequency
 
-### ⏰ Scheduling Options
+### Scheduling Options
 
 Choose from multiple scheduling patterns:
 
@@ -193,9 +192,9 @@ SCHEDULE_INTERVAL = None
 
 ---
 
-## 💾 Database Schema
+## Database Schema
 
-### 📊 Stock Data Table Structure
+### Stock Data Table Structure
 
 ```sql
 CREATE TABLE IF NOT EXISTS stock_data (
@@ -214,7 +213,7 @@ CREATE TABLE IF NOT EXISTS stock_data (
 );
 ```
 
-### 🔍 Accessing the Database
+### Accessing the Database
 
 **Via PgAdmin Web Interface:**
 1. Go to http://localhost:5050
@@ -242,9 +241,9 @@ GROUP BY symbol;
 
 ---
 
-## 🔧 Advanced Configuration
+## Advanced Configuration
 
-### 📝 Customizing Data Fetching
+### Customizing Data Fetching
 
 Edit `/dags/stock_data_pipeline.py` to modify:
 
@@ -263,9 +262,9 @@ EMAIL_ON_FAILURE = True
 
 ---
 
-## 🐛 Troubleshooting Guide
+## Troubleshooting Guide
 
-### ❌ Common Issues and Solutions
+###  Common Issues and Solutions
 
 #### **Issue: "Connection refused" when accessing Airflow**
 ```bash
@@ -345,7 +344,6 @@ Expected performance metrics:
 
 ---
 
-<!-- test change -->
 
 
 
