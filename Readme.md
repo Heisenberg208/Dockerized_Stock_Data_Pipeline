@@ -24,7 +24,7 @@ This project demonstrates a **complete ETL (Extract, Transform, Load) pipeline**
 ---
 
 
-##Architecture Overview
+## Architecture Overview
 
 ```mermaid
 graph TD
