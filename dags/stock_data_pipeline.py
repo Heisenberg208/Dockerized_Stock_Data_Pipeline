@@ -33,14 +33,16 @@ STOCK_SYMBOLS = [
 # Data period to fetch from Yahoo Finance API
 # Options: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'
 DEFAULT_PERIOD = '3mo'
+# Data fetch interval (granularity of stock data)
+DATA_INTERVAL = '1d'  # or ['5m,'1h','1d','1wk','1mo']
 
 # ========================================
 # SCHEDULING CONFIGURATION
 # ========================================
 
 # DAG Start Date Options:
-# Option 1: Start from yesterday 
-DAG_START_DATE = datetime.now() - timedelta(days=1)
+# Option 1: Start Date 
+DAG_START_DATE = datetime.now()
 
 # Option 2: Start from specific date (uncomment to use)
 # DAG_START_DATE = datetime(2024, 12, 1)
@@ -49,16 +51,16 @@ DAG_START_DATE = datetime.now() - timedelta(days=1)
 # DAG_START_DATE = datetime.now() - timedelta(days=30)  # 30 days ago
 
 # ========================================
-# SCHEDULE INTERVAL OPTIONS
+# SCHEDULE INTERVAL OPTIONS FOR DAG
 # ========================================
 
 # Choose your schedule (uncomment ONE option):
 
-# Daily scheduling (recommended for stock data)
-SCHEDULE_INTERVAL = '@daily'
+# Daily scheduling (recommended for stock data) 
+# SCHEDULE_INTERVAL = '@daily' # Runs everyay at 5:30pm IST an 00:00 UTC
 
 # Hourly scheduling (for more frequent updates)
-# SCHEDULE_INTERVAL = '@hourly'
+SCHEDULE_INTERVAL = '@hourly'
 
 # Custom cron expressions:
 # SCHEDULE_INTERVAL = '0 9 * * 1-5'    # 9 AM, Monday to Friday
@@ -113,6 +115,7 @@ dag = DAG(
     max_active_runs=MAX_ACTIVE_RUNS,
     tags=['stock', 'yahoo-finance', 'etl']
 )
+
 
 
 def check_yahoo_api_connection(**context):
@@ -196,18 +199,19 @@ def fetch_and_store_stock_data(**context):
         # Get period from DAG run config or use default
         dag_run = context.get('dag_run')
         period = DEFAULT_PERIOD
+        interval=DATA_INTERVAL
         
         if dag_run and dag_run.conf:
             period = dag_run.conf.get('period', DEFAULT_PERIOD)
         
         print(f" Fetching data for symbols: {STOCK_SYMBOLS}")
         print(f" Period: {period}")
-        
+        print(f" Interval: {interval}")
         # Initialize the Yahoo Finance stock fetcher
         fetcher = YahooStockDataFetcher()
         
         # Run the pipeline
-        success = fetcher.run_pipeline(STOCK_SYMBOLS, period)
+        success = fetcher.run_pipeline(STOCK_SYMBOLS, period,interval)
         
         if not success:
             raise Exception("Stock data pipeline completed with errors")
@@ -296,12 +300,12 @@ def validate_data_freshness(**context):
         cursor.execute("""
             SELECT 
                 symbol,
-                MAX(date_recorded) as latest_date,
-                CURRENT_DATE - MAX(date_recorded) as days_old
+                MAX(date_recorded) AS latest_date,
+                EXTRACT(DAY FROM (CURRENT_DATE - MAX(date_recorded))) AS days_old
             FROM stock_data 
             WHERE symbol IN ('AAPL', 'GOOGL', 'MSFT', 'TSLA')
             GROUP BY symbol
-            HAVING CURRENT_DATE - MAX(date_recorded) > 5;
+            HAVING (CURRENT_DATE - MAX(date_recorded)) > INTERVAL '5 days';
         """)
         
         stale_data = cursor.fetchall()

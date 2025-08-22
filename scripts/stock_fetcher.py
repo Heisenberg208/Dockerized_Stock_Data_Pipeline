@@ -1,417 +1,351 @@
 from datetime import datetime, timedelta
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.providers.postgres.operators.postgres import PostgresOperator
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-import sys
 import os
+import sys
 import requests
+import json
+import psycopg2
+import time
+import logging
+from typing import Dict, List, Optional
+import pandas as pd
 
-sys.path.insert(0, '/opt/airflow/scripts')
-
-# Import  custom Yahoo Finance stock fetcher
-from stock_fetcher import YahooStockDataFetcher
-
-# ========================================
-# USER CONFIGURATION SECTION
-# ========================================
-
-# Stock symbols to fetch (customize as needed)
-STOCK_SYMBOLS = [
-    'RELIANCE.NS',
-    'TCS.NS',
-    'INFY.NS',
-    'HDFCBANK.NS',
-    'ICICIBANK.NS',
-    'HINDUNILVR.NS',
-    'SBIN.NS',
-    'BAJFINANCE.NS'
-]
-
-
-
-# Data period to fetch from Yahoo Finance API
-# Options: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max'
-DEFAULT_PERIOD = '3mo'
-
-# ========================================
-# SCHEDULING CONFIGURATION
-# ========================================
-
-# DAG Start Date Options:
-# Option 1: Start from yesterday 
-DAG_START_DATE = datetime.now() - timedelta(days=1)
-
-# Option 2: Start from specific date (uncomment to use)
-# DAG_START_DATE = datetime(2024, 12, 1)
-
-# Option 3: Start from a relative date (uncomment to use)
-# DAG_START_DATE = datetime.now() - timedelta(days=30)  # 30 days ago
-
-# ========================================
-# SCHEDULE INTERVAL OPTIONS
-# ========================================
-
-# Choose your schedule (uncomment ONE option):
-
-# Daily scheduling (recommended for stock data)
-SCHEDULE_INTERVAL = '@daily'
-
-# Hourly scheduling (for more frequent updates)
-# SCHEDULE_INTERVAL = '@hourly'
-
-# Custom cron expressions:
-# SCHEDULE_INTERVAL = '0 9 * * 1-5'    # 9 AM, Monday to Friday
-# SCHEDULE_INTERVAL = '0 */4 * * *'    # Every 4 hours
-# SCHEDULE_INTERVAL = '30 15 * * 1-5'  # 3:30 PM, weekdays only
-
-# Manual trigger only (no automatic scheduling)
-# SCHEDULE_INTERVAL = None
-
-# ========================================
-# ADVANCED OPTIONS
-# ========================================
-
-# Catchup behavior
-# True: Run missed DAG instances for historical dates
-# False: Only run from start_date forward (recommended)
-ENABLE_CATCHUP = False
-
-# Maximum concurrent DAG runs
-MAX_ACTIVE_RUNS = 1
-
-# Email notifications (set to True if you want email alerts)
-EMAIL_ON_FAILURE = False
-EMAIL_ON_RETRY = False
-
-# Retry configuration
-RETRIES = 2
-RETRY_DELAY_MINUTES = 5
-
-# ========================================
-# DAG CONFIGURATION (DO NOT MODIFY)
-# ========================================
-
-# Default arguments for the DAG
-default_args = {
-    'owner': 'data-team',
-    'depends_on_past': False,
-    'start_date': DAG_START_DATE,
-    'email_on_failure': EMAIL_ON_FAILURE,
-    'email_on_retry': EMAIL_ON_RETRY,
-    'retries': RETRIES,
-    'retry_delay': timedelta(minutes=RETRY_DELAY_MINUTES),
-    'catchup': ENABLE_CATCHUP
-}
-
-# Create the DAG
-dag = DAG(
-    'yahoo_stock_data_pipeline',
-    default_args=default_args,
-    description='Simplified pipeline to fetch and store stock data from Yahoo Finance',
-    schedule_interval=SCHEDULE_INTERVAL,
-    max_active_runs=MAX_ACTIVE_RUNS,
-    tags=['stock', 'yahoo-finance', 'etl']
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
+logger = logging.getLogger(__name__)
 
-
-def check_yahoo_api_connection(**context):
-    """Check if Yahoo Finance API is accessible"""
-    print("🔍 Testing Yahoo Finance API connection...")
+class YahooStockDataFetcher:
+    """
+    A class to fetch stock data from Yahoo Finance API and store it in PostgreSQL
+    """
     
-    url = "https://query1.finance.yahoo.com/v8/finance/chart/AAPL"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-    params = {'range': '1d', 'interval': '1d'}
+    def __init__(self):
+        self.db_config = {
+            'host': os.getenv('POSTGRES_HOST', 'postgres'),
+            'database': os.getenv('POSTGRES_DB', 'stockdata'),
+            'user': os.getenv('POSTGRES_USER', 'airflow'),
+            'password': os.getenv('POSTGRES_PASSWORD', 'airflow123'),
+            'port': os.getenv('POSTGRES_PORT', '5432')
+        }
+        
+        # Yahoo Finance 
+        self.base_url = "https://query1.finance.yahoo.com/v8/finance/chart"
+        
+        # Headers to mimic browser request
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+    def get_database_connection(self):
+        """
+        Establish and return a database connection with retry logic
+        """
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                conn = psycopg2.connect(**self.db_config)
+                logger.info("Successfully connected to PostgreSQL database")
+                return conn
+            except psycopg2.Error as e:
+                retry_count += 1
+                logger.error(f"Database connection attempt {retry_count} failed: {e}")
+                if retry_count >= max_retries:
+                    raise
+                time.sleep(2)  
     
-    try:
-        response = requests.get(url, params=params, headers=headers, timeout=15)
-        response.raise_for_status()
-        data = response.json()
+    def fetch_stock_data(self, symbol: str = "AAPL", period: str = "3mo",interval: str='1d') -> Optional[Dict]:
+        """
+        Fetch stock data from Yahoo Finance API
         
-        if 'chart' not in data or not data['chart']['result']:
-            raise Exception("Invalid response format from Yahoo Finance")
-        
-        print("✅ Yahoo Finance API connection successful")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Yahoo Finance API connection failed: {e}")
-        raise
-
-
-def check_database_connection(**context):
-    """Check PostgreSQL database connection and verify table"""
-    print("🔍 Testing database connection...")
-    
-    try:
-        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
-        conn = pg_hook.get_conn()
-        cursor = conn.cursor()
-        
-        # Check if stock_data table exists
-        cursor.execute("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'stock_data'
-            );
-        """)
-        
-        table_exists = cursor.fetchone()[0]
-        
-        if table_exists:
-            print("✅ stock_data table exists")
+        Args:
+            symbol: Stock symbol (e.g., 'AAPL')
+            period: Time period ('1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max')
+        """
+        try:
+            # Yahoo Finance API endpoint
+            url = f"{self.base_url}/{symbol}"
             
-            # Show table structure
-            cursor.execute("""
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = 'stock_data'
-                ORDER BY ordinal_position;
-            """)
+            params = {
+                'range': period,
+                'interval': interval,  
+                'includePrePost': 'true',
+                'events': 'div%2Csplit'
+            }
             
-            columns = cursor.fetchall()
-            print("📋 Table structure:")
-            for col_name, col_type in columns:
-                print(f"   • {col_name}: {col_type}")
+            logger.info(f"Fetching stock data for {symbol} (period: {period})")
+            response = requests.get(url, params=params, headers=self.headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Check for API errors
+            if 'chart' not in data or not data['chart']['result']:
+                logger.error(f"No data returned for {symbol}")
+                return None
+            
+            chart_data = data['chart']['result'][0]
+            
+            if 'timestamp' not in chart_data or not chart_data['timestamp']:
+                logger.error(f"No timestamp data for {symbol}")
+                return None
+            
+            logger.info(f"Successfully fetched data for {symbol}")
+            return chart_data
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed for {symbol}: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response for {symbol}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error fetching data for {symbol}: {e}")
+            return None
+    
+    def parse_stock_data(self, data: Dict, symbol: str) -> List[Dict]:
+        """
+        Parse the Yahoo Finance API response and extract relevant data points
+        """
+        try:
+            timestamps = data.get('timestamp', [])
+            indicators = data.get('indicators', {})
+            quote = indicators.get('quote', [{}])[0]
+            
+            # Extract price arrays
+            opens = quote.get('open', [])
+            highs = quote.get('high', [])
+            lows = quote.get('low', [])
+            closes = quote.get('close', [])
+            volumes = quote.get('volume', [])
+            
+            parsed_data = []
+            
+            for i, timestamp in enumerate(timestamps):
+                try:
+                    # Convert timestamp to date
+                    date_obj = datetime.fromtimestamp(timestamp) 
+                    
+                    # Skip if any of the essential price data is missing
+                    if (i >= len(opens) or i >= len(highs) or 
+                        i >= len(lows) or i >= len(closes)):
+                        continue
+                    
+                    # Extract price data with proper error handling
+                    record = {
+                        'symbol': symbol,
+                        'date_recorded': date_obj,
+                        'open_price': self._safe_float_conversion(opens[i]),
+                        'high_price': self._safe_float_conversion(highs[i]),
+                        'low_price': self._safe_float_conversion(lows[i]),
+                        'close_price': self._safe_float_conversion(closes[i]),
+                        'volume': self._safe_int_conversion(volumes[i] if i < len(volumes) else None)
+                    }
+                    
+                    # Only add record if we have essential price data
+                    if (record['open_price'] is not None and 
+                        record['high_price'] is not None and
+                        record['low_price'] is not None and 
+                        record['close_price'] is not None):
+                        parsed_data.append(record)
+                    
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Skipping invalid data point {i} for {symbol}: {e}")
+                    continue
+            
+            logger.info(f"Parsed {len(parsed_data)} records for {symbol}")
+            return parsed_data
+            
+        except Exception as e:
+            logger.error(f"Error parsing stock data for {symbol}: {e}")
+            return []
+    
+    def _safe_float_conversion(self, value) -> Optional[float]:
+        """Safely convert value to float"""
+        try:
+            if value is None:
+                return None
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+    
+    def _safe_int_conversion(self, value) -> Optional[int]:
+        """Safely convert value to int"""
+        try:
+            if value is None:
+                return None
+            return int(float(value))
+        except (ValueError, TypeError):
+            return None
+    
+    def update_database(self, stock_records: List[Dict]) -> bool:
+        """
+        Update PostgreSQL database with stock data using UPSERT logic
+        """
+        if not stock_records:
+            logger.warning("No stock records to update")
+            return False
+        
+        conn = None
+        cursor = None
+        
+        try:
+            conn = self.get_database_connection()
+            cursor = conn.cursor()
+            
+            # Prepare the UPSERT query (INSERT ... ON CONFLICT)
+            upsert_query = """
+                INSERT INTO stock_data (symbol, date_recorded, open_price, high_price, low_price, close_price, volume, updated_at)
+                VALUES (%(symbol)s, %(date_recorded)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, CURRENT_TIMESTAMP)
+                ON CONFLICT (symbol, date_recorded)
+                DO UPDATE SET
+                    open_price = EXCLUDED.open_price,
+                    high_price = EXCLUDED.high_price,
+                    low_price = EXCLUDED.low_price,
+                    close_price = EXCLUDED.close_price,
+                    volume = EXCLUDED.volume,
+                    updated_at = CURRENT_TIMESTAMP;
+            """
+            
+            # Execute the batch insert/update
+            cursor.executemany(upsert_query, stock_records)
+            conn.commit()
+            
+            logger.info(f"Successfully updated {len(stock_records)} records in database")
+            return True
+            
+        except psycopg2.Error as e:
+            logger.error(f"Database error: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error updating database: {e}")
+            if conn:
+                conn.rollback()
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    
+    def get_stock_info(self, symbol: str) -> Optional[Dict]:
+        """
+        Get basic stock information (optional method for additional data)
+        """
+        try:
+            url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}"
+            params = {
+                'modules': 'price,summaryDetail,assetProfile'
+            }
+            
+            response = requests.get(url, params=params, headers=self.headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if 'quoteSummary' in data and data['quoteSummary']['result']:
+                return data['quoteSummary']['result'][0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error fetching stock info for {symbol}: {e}")
+            return None
+    
+    def run_pipeline(self, symbols: List[str] = None, period: str = "3mo",interval:str='1d') -> bool:
+        """
+        Run the complete data pipeline for specified symbols
+        
+        Args:
+            symbols: List of stock symbols
+            period: Time period for data ('1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max')
+        """
+        if symbols is None:
+            symbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA']  
+        
+        logger.info(f"Starting pipeline for symbols: {symbols} (period: {period})")
+        overall_success = True
+        
+        for symbol in symbols:
+            try:
+                # Fetch data from Yahoo Finance
+                api_data = self.fetch_stock_data(symbol, period,interval)
+                
+                if api_data is None:
+                    logger.error(f"Failed to fetch data for {symbol}")
+                    overall_success = False
+                    continue
+                
+                # Parse the data
+                parsed_data = self.parse_stock_data(api_data, symbol)
+                
+                if not parsed_data:
+                    logger.error(f"No valid data parsed for {symbol}")
+                    overall_success = False
+                    continue
+                
+                # Update database
+                update_success = self.update_database(parsed_data)
+                
+                if not update_success:
+                    logger.error(f"Failed to update database for {symbol}")
+                    overall_success = False
+                    
+                # Small delay to be respectful to Yahoo Finance
+                time.sleep(5)
+                
+            except Exception as e:
+                logger.error(f"Pipeline failed for {symbol}: {e}")
+                overall_success = False
+        
+        if overall_success:
+            logger.info("Pipeline completed successfully for all symbols")
         else:
-            print("⚠️  stock_data table does not exist - will be created if needed")
+            logger.warning("Pipeline completed with some errors")
         
-        cursor.close()
-        conn.close()
-        print("✅ Database connection verified")
-        return True
-        
-    except Exception as e:
-        print(f" Database connection failed: {e}")
-        raise
+        return overall_success
 
-
-def fetch_and_store_stock_data(**context):
-    """Main task to fetch and store stock data from Yahoo Finance"""
-    print(" Starting stock data fetch and store process...")
-    
+def main():
+    """
+    Main function to run the stock data fetcher
+    """
     try:
-        # Get period from DAG run config or use default
-        dag_run = context.get('dag_run')
-        period = DEFAULT_PERIOD
+        # Parse command line arguments
+        symbols = []
+        period = "3mo"  # Default period
         
-        if dag_run and dag_run.conf:
-            period = dag_run.conf.get('period', DEFAULT_PERIOD)
+        # Simple argument parsing
+        args = sys.argv[1:]
+        i = 0
+        while i < len(args):
+            if args[i] == '--period' and i + 1 < len(args):
+                period = args[i + 1]
+                i += 2
+            else:
+                symbols.append(args[i])
+                i += 1
         
-        print(f" Fetching data for symbols: {STOCK_SYMBOLS}")
-        print(f" Period: {period}")
+        # Use defaults if no symbols provided
+        if not symbols:
+            symbols = ['AAPL', 'GOOGL', 'MSFT', 'TSLA']
         
-        # Initialize the Yahoo Finance stock fetcher
+        logger.info(f"Running for symbols: {symbols}, period: {period}")
+        
+        # Initialize and run the fetcher
         fetcher = YahooStockDataFetcher()
+        success = fetcher.run_pipeline(symbols, period)
         
-        # Run the pipeline
-        success = fetcher.run_pipeline(STOCK_SYMBOLS, period)
-        
-        if not success:
-            raise Exception("Stock data pipeline completed with errors")
-        
-        print("✅ Stock data pipeline completed successfully")
-        return True
+        # Exit with appropriate code
+        sys.exit(0 if success else 1)
         
     except Exception as e:
-        print(f"❌ Stock data pipeline failed: {e}")
-        raise
+        logger.error(f"Fatal error: {e}")
+        sys.exit(1)
 
-
-def generate_summary_report(**context):
-    """Generate a summary report of the data update"""
-    print("📋 Generating summary report...")
-    
-    try:
-        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
-        conn = pg_hook.get_conn()
-        cursor = conn.cursor()
-        
-        # Get summary statistics by symbol
-        cursor.execute("""
-            SELECT 
-                symbol, 
-                COUNT(*) as record_count,
-                MIN(date_recorded) as earliest_date,
-                MAX(date_recorded) as latest_date,
-                ROUND(CAST(AVG(close_price) AS numeric), 2) as avg_close_price,
-                MAX(updated_at) as last_updated
-            FROM stock_data 
-            WHERE date_recorded >= CURRENT_DATE - INTERVAL '60 days'  -- Last 2 months
-            GROUP BY symbol 
-            ORDER BY symbol;
-        """)
-        
-        results = cursor.fetchall()
-        
-        print("\n" + "=" * 80)
-        print("📈 YAHOO FINANCE STOCK DATA PIPELINE SUMMARY")
-        print("=" * 80)
-        
-        if results:
-            print(f"{'Symbol':<8} {'Records':<8} {'From':<12} {'To':<12} {'Avg Price':<12} {'Updated'}")
-            print("-" * 80)
-            
-            for symbol, count, earliest, latest, avg_price, updated in results:
-                avg_price_str = f"${avg_price}" if avg_price else "N/A"
-                print(f"{symbol:<8} {count:<8} {earliest} {latest} {avg_price_str:<12} {updated.strftime('%Y-%m-%d %H:%M')}")
-        else:
-            print("⚠️  No recent data found in stock_data table")
-        
-        # Get total statistics
-        cursor.execute("SELECT COUNT(*) FROM stock_data;")
-        total_count = cursor.fetchone()[0]
-        
-        cursor.execute("""
-            SELECT COUNT(*) FROM stock_data 
-            WHERE updated_at >= NOW() - INTERVAL '24 hours';
-        """)
-        recent_updates = cursor.fetchone()[0]
-        
-        print(f"\n📊 Total records in database: {total_count:,}")
-        print(f"🔄 Records updated in last 24 hours: {recent_updates}")
-        print("=" * 80 + "\n")
-        
-        cursor.close()
-        conn.close()
-        return True
-        
-    except Exception as e:
-        print(f"❌ Failed to generate summary report: {e}")
-        raise
-
-
-def validate_data_freshness(**context):
-    """Validate that we have recent data for key symbols"""
-    print("🔍 Validating data freshness...")
-    
-    try:
-        pg_hook = PostgresHook(postgres_conn_id='postgres_default')
-        conn = pg_hook.get_conn()
-        cursor = conn.cursor()
-        
-        # Check for stale data (older than 5 days for key symbols)
-        cursor.execute("""
-            SELECT 
-                symbol,
-                MAX(date_recorded) as latest_date,
-                CURRENT_DATE - MAX(date_recorded) as days_old
-            FROM stock_data 
-            WHERE symbol IN ('AAPL', 'GOOGL', 'MSFT', 'TSLA')
-            GROUP BY symbol
-            HAVING CURRENT_DATE - MAX(date_recorded) > 5;
-        """)
-        
-        stale_data = cursor.fetchall()
-        
-        if stale_data:
-            print("⚠️  Warning: Stale data detected for key symbols:")
-            for symbol, latest_date, days_old in stale_data:
-                print(f"   • {symbol}: {days_old} days old (latest: {latest_date})")
-        else:
-            print("✅ All key symbols have recent data (within 5 days)")
-        
-        cursor.close()
-        conn.close()
-        return True
-        
-    except Exception as e:
-        print(f"❌ Data freshness validation failed: {e}")
-        raise
-
-
-# Define Tasks
-
-# Task 1: Check Yahoo Finance API Connection
-check_api_task = PythonOperator(
-    task_id='check_yahoo_api_connection',
-    python_callable=check_yahoo_api_connection,
-    dag=dag
-)
-
-# Task 2: Check Database Connection
-check_db_task = PythonOperator(
-    task_id='check_database_connection',
-    python_callable=check_database_connection,
-    dag=dag
-)
-
-# Task 3: Fetch and Store Stock Data
-fetch_data_task = PythonOperator(
-    task_id='fetch_and_store_stock_data',
-    python_callable=fetch_and_store_stock_data,
-    dag=dag
-)
-
-# Task 4: Generate Summary Report
-summary_task = PythonOperator(
-    task_id='generate_summary_report',
-    python_callable=generate_summary_report,
-    dag=dag
-)
-
-# Task 5: Data Quality Check
-data_quality_task = PostgresOperator(
-    task_id='data_quality_check',
-    postgres_conn_id='postgres_default',
-    sql="""
-        -- 🔍 Data Quality Checks for Recent Yahoo Finance Data
-        WITH quality_metrics AS (
-            SELECT 
-                symbol,
-                COUNT(*) as total_records,
-                COUNT(CASE WHEN open_price IS NULL THEN 1 END) as null_opens,
-                COUNT(CASE WHEN close_price IS NULL THEN 1 END) as null_closes,
-                COUNT(CASE WHEN high_price IS NULL THEN 1 END) as null_highs,
-                COUNT(CASE WHEN low_price IS NULL THEN 1 END) as null_lows,
-                COUNT(CASE WHEN volume IS NULL THEN 1 END) as null_volumes,
-                MIN(date_recorded) as earliest_date,
-                MAX(date_recorded) as latest_date,
-                -- Check for data integrity issues
-                COUNT(CASE WHEN high_price < low_price THEN 1 END) as invalid_high_low,
-                COUNT(CASE WHEN open_price < 0 OR close_price < 0 THEN 1 END) as negative_prices,
-                COUNT(CASE WHEN volume < 0 THEN 1 END) as negative_volume
-            FROM stock_data 
-            WHERE date_recorded >= CURRENT_DATE - INTERVAL '45 days'  -- Last 45 days
-            GROUP BY symbol
-        )
-        SELECT 
-            symbol,
-            total_records,
-            null_opens + null_closes + null_highs + null_lows as total_nulls,
-            invalid_high_low,
-            negative_prices,
-            negative_volume,
-            earliest_date,
-            latest_date,
-            CASE 
-                WHEN null_opens + null_closes + null_highs + null_lows > 0 
-                     THEN '⚠️ WARNING: NULL price values detected'
-                WHEN invalid_high_low > 0 
-                     THEN '❌ ERROR: Invalid high/low price relationships'
-                WHEN negative_prices > 0 
-                     THEN '❌ ERROR: Negative prices detected'
-                WHEN negative_volume > 0 
-                     THEN '⚠️ WARNING: Negative volume detected'
-                ELSE '✅ PASS'
-            END as quality_status
-        FROM quality_metrics
-        ORDER BY symbol;
-    """,
-    dag=dag
-)
-
-# Task 6: Data Freshness Validation
-freshness_task = PythonOperator(
-    task_id='validate_data_freshness',
-    python_callable=validate_data_freshness,
-    dag=dag
-)
-
-# Define Task Dependencies
-
-
-# Parallel checks → Data fetch → Parallel validations
-[check_api_task, check_db_task] >> fetch_data_task >> [summary_task, data_quality_task, freshness_task]
+if __name__ == "__main__":
+    main()
