@@ -79,7 +79,7 @@ cd Dockerized_Stock_Data_Pipeline
 # Copy the environment template
 # powershell or linux
 cp .env.example .env
-# winows CMD
+# windows CMD
 copy .env.example .env
 
 # Open the .env file and change values as mentioned further
